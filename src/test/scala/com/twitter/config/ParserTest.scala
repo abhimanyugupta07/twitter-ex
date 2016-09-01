@@ -11,7 +11,7 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
 
   implicit override val generatorDrivenConfig = PropertyCheckConfig(minSize = 100, maxSize = 100)
 
-  val asciiString = Gen.containerOf[Array, Char](Gen.choose[Char](0, 127)).map(_.mkString)
+  val asciiString = Gen.containerOf[Array, Char](Gen.alphaNumChar).map(_.mkString)
   val asciiSeq = Gen.listOf(asciiString)
 
   implicit class ParsedAugmenter[T](val result: Parsed[T]) {
@@ -27,8 +27,13 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
   }
 
   def validString(str: String): Boolean = {
-    str.nonEmpty && """[\;,\,,\n,\r]""".r.findFirstIn(str).isEmpty
+    str.nonEmpty && str.trim.nonEmpty && """[\;,\,,\n,\r]""".r.findFirstIn(str).isEmpty
   }
+
+  def validOverrideString(str: String): Boolean = {
+    str.nonEmpty && str.trim.nonEmpty && """\<,\>,\=,\,,\n,\r]""".r.findFirstIn(str).isEmpty
+  }
+
 
   val loader = new ConfigLoader()
 
@@ -184,14 +189,13 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
 
   "The string list parser" should "parse a generated entry to a list of strings" in {
     forAll(asciiSeq) { strings =>
-      if (strings.size > 1) {
+      if (strings.length > 1 && strings.forall(validString)) {
         val input = strings.mkString(",")
         val parsed = loader.stringList.parse(input).option
 
         parsed shouldBe defined
         parsed.value.value should contain theSameElementsAs strings
       } else {
-        Console.println(strings.size)
         val input = strings.mkString(",")
         val parsed = loader.stringList.parse(input).option
 
@@ -221,9 +225,9 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
     parsed.value._2.value shouldBe SettingOverride(overrideGroup)
   }
 
-  "The setting key parser" should "parse a setting key without an override" in {
+  "The setting key parser" should "parse a generated setting key without an override" in {
     forAll(asciiString) { str =>
-      if (validString(str) && str.indexOf('<') == -1 && str.indexOf('>') == -1) {
+      if (validOverrideString(str)) {
         val parsed = loader.settingKeyParser.parse(str).option
         parsed shouldBe defined
         parsed.value._1 shouldEqual str
@@ -235,17 +239,11 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
     }
   }
 
-  "The setting key parser" should "parse a setting key with an override" in {
+  "The setting key parser" should "parse a generated setting key with an override" in {
     forAll(asciiString, asciiString) { (str, ov) =>
       val setting = s"$str<$ov>"
 
-      if (str.indexOf('<') == -1 &&
-        str.indexOf('>') == -1 &&
-        ov.indexOf('<') == -1 &&
-        ov.indexOf('>') == -1 &&
-        str.nonEmpty &&
-        ov.nonEmpty
-      ) {
+      if (validOverrideString(str) && validOverrideString(ov)) {
         val parsed = loader.settingKeyParser.parse(setting).option
         parsed shouldBe defined
         parsed.value._1 shouldEqual str

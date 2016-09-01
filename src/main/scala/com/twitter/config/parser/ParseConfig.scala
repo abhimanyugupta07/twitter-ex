@@ -31,7 +31,7 @@ trait ConfigParser {
   val NonLineEnding = NamedFunction(!"\r\n".contains(_: Char), "StringChars")
   val nonDelimited = NamedFunction(!",\r\n".contains(_: Char), "StringChars")
   val NonWhitespace = NamedFunction(!" \r\n".contains(_: Char), "StringChars")
-  val nonDelimitedSetting = NamedFunction(!"<,= \r\n".contains(_: Char), "StringChars")
+  val nonDelimitedSetting = NamedFunction(!" <>,=\r\n".contains(_: Char), "StringChars")
 
   val groupParser: P[ParsedGroup] = P(("[" ~ CharsWhile(_ != ']').! ~ "]").map(str => ParsedGroup(Group(str))))
 
