@@ -1,11 +1,9 @@
 package com.twitter.config.parser
 
-import apple.laf.JRSUIConstants.BooleanValue
 import com.twitter.config.adt._
 import com.twitter.config.{Config, Group}
-import fastparse.all._
-
 import scala.io.Source
+import fastparse.all._
 
 trait ParsedLine
 
@@ -18,8 +16,6 @@ case class ParsedSettingValue[T](setting: SettingValue[T]) extends ParsedLine
 case class ParsedGroup(value: Group) extends ParsedLine
 
 case class OrphanedLine(value: String) extends ParsedLine
-
-import fastparse.all._
 
 class ConfigLoader {
   case class NamedFunction[T, V](f: T => V, name: String) extends (T => V){
@@ -62,7 +58,9 @@ class ConfigLoader {
 
   val strParser: P[StringValue] = P(CharsWhile(!";\r\n".contains(_)).!) map StringValue
 
-  val stringList: P[StringListValue] = P(CharsWhile(nonDelimited).! ~/ ",".?).rep.map(StringListValue)
+  val stringListRaw: P[Seq[String]] = P(CharsWhile(nonDelimited).!).rep(sep = ",")
+
+  val stringList: P[StringListValue] = P(CharsWhile(nonDelimited).!).rep(sep = ",").map(StringListValue)
 
   val valueParser: P[ConfigValue[_]] = P(booleanParser | numParser | numberList | stringList | strParser)
 

@@ -1,6 +1,6 @@
 package com.twitter.config
 
-import com.twitter.config.adt.BooleanConfigValue
+import com.twitter.config.adt.{BooleanConfigValue, LongValue, StringListValue}
 import com.twitter.config.parser.ConfigLoader
 import fastparse.core.Parsed
 import org.scalatest.prop.Configuration.PropertyCheckConfig
@@ -182,6 +182,18 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
     parsed.value.value should contain theSameElementsAs List("test", "test2", "test4")
   }
 
+  "The string list parser" should "parse a generated entry to a list of strings" in {
+    forAll { strings: Seq[String] =>
+      whenever(strings.nonEmpty && strings.forall(_.nonEmpty)) {
+        val input = strings.mkString("")
+        val parsed = loader.stringListRaw.parse(input).option
+
+        parsed shouldBe defined
+        parsed.value should contain theSameElementsAs strings
+      }
+    }
+  }
+
   "The setting key parser" should "parse a single setting key without an override" in {
     val str = "testsetting"
     val parsed = loader.settingKeyParser.parse(str).option
@@ -270,6 +282,28 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
     parsed.value.isInstanceOf[BooleanConfigValue] shouldEqual true
   }
 
+  "The value parser" should "parse a long value from a numeric input" in {
+    forAll { (num: Long) =>
+      val parsed = loader.valueParser.parse(num.toString).option
+      parsed shouldBe defined
+      parsed.value.value shouldEqual num
+      parsed.value.isInstanceOf[LongValue] shouldEqual true
+    }
+  }
+
+  "The value parser" should "parse a string list value from an input" in {
+    forAll { strings: Seq[String] =>
+      val input = strings.mkString(",")
+
+      whenever(strings.nonEmpty && input.nonEmpty) {
+        val parsed = loader.valueParser.parse(input).option
+        parsed shouldBe defined
+        parsed.value.isInstanceOf[StringListValue] shouldEqual true
+
+        parsed.value.asInstanceOf[StringListValue].value should contain theSameElementsAs strings
+      }
+    }
+  }
 
   "The setting parser" should "parse a boolean setting with an override" ignore {
     val key = "key"
