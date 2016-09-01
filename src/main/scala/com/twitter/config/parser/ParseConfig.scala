@@ -31,8 +31,9 @@ class ConfigLoader {
   val NonLineEnding = NamedFunction(!"\r\n".contains(_: Char), "StringChars")
   val nonDelimited = NamedFunction(!",\r\n".contains(_: Char), "StringChars")
   val NonWhitespace = NamedFunction(!" \r\n".contains(_: Char), "StringChars")
+  val nonDelimitedSetting = NamedFunction(!"<,= \r\n".contains(_: Char), "StringChars")
 
-  val groupParser: P[ParsedGroup] = P(("[" ~/ CharsWhile(_ != ']').! ~/ "]").!.map(str => ParsedGroup(Group(str))))
+  val groupParser: P[ParsedGroup] = P(("[" ~ CharsWhile(_ != ']').! ~ "]").!.map(str => ParsedGroup(Group(str))))
 
   val overrideParser: P[Group] = P("<" ~/ CharsWhile(_ != '>').! ~/ ">").map(Group)
 
@@ -50,7 +51,7 @@ class ConfigLoader {
     */
   val numParser: P[LongValue] = P(rawLongParser ~ End).map(LongValue)
 
-  val space  = P(CharIn(Seq('\r', '\n', ' ')).?)
+  val space = P(CharIn(Seq('\r', '\n', ' ')).?)
 
   val numberSeq = P(rawLongParser.!.map(_.toLong).rep(min = 2, sep = ","))
 
@@ -66,7 +67,7 @@ class ConfigLoader {
 
   val valueParser: P[ConfigValue[_]] = P(numberList | stringList | booleanParser | numParser | strParser)
 
-  val settingKeyParser = P(CharsWhile(_ != '<').rep.! ~ overrideParser.?)
+  val settingKeyParser = P(CharsWhile(nonDelimitedSetting).rep.! ~ overrideParser.?)
 
   val settingParser: P[ParsedSettingValue[_]] = P(settingKeyParser ~ space ~ "=" ~ space ~ valueParser).map {
     case (key, groupOverride, value) => {
@@ -74,15 +75,13 @@ class ConfigLoader {
     }
   }
 
-  val commentParser: P[ParsedComment] = P(";" ~/ CharsWhile(NonLineEnding).rep.! ~/ CharsWhile(Whitespace).rep(1)).map(ParsedComment)
+  val commentParser: P[ParsedComment] = P(";" ~/ CharsWhile(NonLineEnding).!).map(ParsedComment)
 
   val orphanedLine: P[ParsedOrphanedLine] = P(CharsWhile(!";\r\n".contains(_)).rep.!).map(ParsedOrphanedLine)
 
-  val lineParser: P[ParsedLine] = groupParser | settingParser | commentParser | orphanedLine
-
+  val lineParser: P[ParsedLine] = P(groupParser | settingParser | commentParser | orphanedLine)
 
   val fileParser = lineParser.rep(0, sep = P(eol))
-
 
   protected[config] def parseLine(line: String): Option[ParsedLine] = {
     if (line.isEmpty) new EmptyLine
@@ -94,20 +93,28 @@ class ConfigLoader {
   }
 
   def buildConfig(lines: Iterator[Parsed[ParsedLine]]): Config = {
-    lines.foldRight(Config.Empty) { case (line, acc) => {
-      var currentGroup: Option[Group] = None
+    var currentGroup: Option[Group] = None
+
+    lines.foldLeft(Config.Empty) { case (acc, line) => {
 
       line match {
         case Parsed.Success(parsed, index) => {
+          Console.println(parsed)
           parsed match {
-            case x @ EmptyLine() => acc
+            case x @ EmptyLine() => {
+              Console.println(s"Found an empty line $parsed")
+              acc
+            }
+
             case ParsedGroup(group) => {
+              Console.println(s"Found a group called $group")
               currentGroup = Some(group)
               acc
             }
 
             case ParsedSettingValue(setting) => {
               if (currentGroup.isEmpty) {
+                Console.println(parsed)
                 throw new Exception("No group was defined before settings were defined")
               } else {
                 acc.add(currentGroup.get, setting)
@@ -122,9 +129,16 @@ class ConfigLoader {
               Console.println(s"Found orphaned line $value")
               acc
             }
+            case l @ _ => {
+              Console.println(s"Found unexpected result $parsed")
+              acc
+            }
           }
         }
         case f @ Parsed.Failure(last, index, extra) => {
+          Console.println(last)
+          Console.println(index)
+          Console.println(extra)
           throw new Exception(f.msg)
         }
       }
@@ -141,4 +155,9 @@ class ConfigLoader {
   }
 }
 
-object ConfigLoader
+object ConfigLoader {
+
+  def loadConfig(file: String): Config = {
+    new ConfigLoader().loadConfig(file)
+  }
+}

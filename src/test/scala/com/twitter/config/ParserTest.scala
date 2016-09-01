@@ -252,7 +252,7 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
     forAll { (str: String, ov: String) =>
       val setting = s"$str<$ov>"
 
-      whenever(str.indexOf('<') == -1 &&
+      if(str.indexOf('<') == -1 &&
         str.indexOf('>') == -1 &&
         ov.indexOf('<') == -1 &&
         ov.indexOf('>') == -1 &&
@@ -265,6 +265,9 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
 
         parsed.value._2 shouldBe defined
         parsed.value._2.value shouldBe Group(ov)
+      } else {
+        val parsed = loader.settingKeyParser.parse(setting).option
+        parsed shouldBe empty
       }
     }
   }
@@ -355,6 +358,36 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
     parsed.value.setting.group shouldBe empty
   }
 
+  "The setting parser" should "parse a long setting without an override and with spaces" in {
+    val key = "key"
+    val value = 150L
+    val str = s"$key = $value"
+    val parsed = loader.settingParser.parse(str).option
+
+    parsed shouldBe defined
+    parsed.value.setting.key shouldEqual key
+    parsed.value.setting.value.isInstanceOf[LongValue] shouldEqual true
+    parsed.value.setting.value.asInstanceOf[LongValue].value shouldEqual value
+
+    parsed.value.setting.group shouldBe empty
+  }
+
+  "The setting parser" should "parse a long setting with an override and with spaces" in {
+    val key = "key"
+    val overrideGroup = "override"
+    val value = 150L
+    val str = s"$key<$overrideGroup> = $value"
+    val parsed = loader.settingParser.parse(str).option
+
+    parsed shouldBe defined
+    parsed.value.setting.key shouldEqual key
+    parsed.value.setting.value.isInstanceOf[LongValue] shouldEqual true
+    parsed.value.setting.value.asInstanceOf[LongValue].value shouldEqual value
+
+    parsed.value.setting.group shouldBe defined
+    parsed.value.setting.group.value shouldBe Group(overrideGroup)
+  }
+
   "The setting parser" should "parse a boolean setting without an override and without spaces" in {
     val key = "key"
     val value = "true"
@@ -379,6 +412,7 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
     parsed.value.setting.group.value shouldBe Group(overrideGroup)
   }
 
+
   "The setting parser" should "parse a boolean setting with an override and with spaces" in {
     val key = "key"
     val overrideGroup = "override"
@@ -388,6 +422,10 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
 
     parsed shouldBe defined
     parsed.value.setting.key shouldEqual key
+
+    parsed.value.setting.value.isInstanceOf[BooleanConfigValue] shouldEqual true
+    parsed.value.setting.value.asInstanceOf[BooleanConfigValue].value shouldEqual true
+
     parsed.value.setting.group shouldBe defined
     parsed.value.setting.group.value shouldBe Group(overrideGroup)
   }
