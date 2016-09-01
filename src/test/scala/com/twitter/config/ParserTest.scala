@@ -1,21 +1,35 @@
 package com.twitter.config
 
-import com.twitter.config.adt.{BooleanConfigValue, LongValue, StringListValue}
+import java.util.UUID
+
+import com.twitter.config.adt._
 import com.twitter.config.parser.ConfigLoader
 import fastparse.core.Parsed
+import org.scalacheck.Gen
 import org.scalatest.prop.Configuration.PropertyCheckConfig
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers, OptionValues}
 
+import scala.util.Try
+
 class ParserTest extends FlatSpec with Matchers with OptionValues with GeneratorDrivenPropertyChecks {
 
-  implicit override val generatorDrivenConfig = PropertyCheckConfig(minSize = 500, maxSize = 500)
+  implicit override val generatorDrivenConfig = PropertyCheckConfig(minSize = 100, maxSize = 100)
 
   implicit class ParsedAugmenter[T](val result: Parsed[T]) {
     def option: Option[T] = result match {
       case Parsed.Success(res, index) => Some(res)
       case Parsed.Failure(last, index, extra) => None
     }
+  }
+
+  def noDelimiters(str: String): Boolean = {
+    val delimiters = List('\n', '\r', ';', ',')
+    delimiters.forall(!str.contains(_))
+  }
+
+  def validString(str: String): Boolean = {
+    str.nonEmpty && """[\;,\,,\n,\r]""".r.findFirstIn(str).isEmpty
   }
 
   val loader = new ConfigLoader()
@@ -78,9 +92,9 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
     parsed.value.value should contain theSameElementsAs numbers
   }
 
-  "The list parser" should "correctly parse a list of numeric long values list from a generator" ignore {
+  "The list parser" should "correctly parse a list of numeric long values list from a generator" in {
     forAll { numbers: Seq[Long] =>
-      whenever(numbers.nonEmpty) {
+      if(numbers.size > 1) {
         val parsed = loader.numberList.parse(numbers.mkString(",")).option
         parsed shouldBe defined
 
@@ -89,8 +103,11 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
         numbers.size shouldEqual parsed.value.value.size
 
         parsed.value.value should contain theSameElementsAs numbers
-      }
+      } else {
+        val parsed = loader.numberList.parse(numbers.mkString(",")).option
+        parsed shouldBe empty
 
+      }
     }
   }
 
@@ -184,12 +201,17 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
 
   "The string list parser" should "parse a generated entry to a list of strings" in {
     forAll { strings: Seq[String] =>
-      whenever(strings.nonEmpty && strings.forall(_.nonEmpty)) {
-        val input = strings.mkString("")
-        val parsed = loader.stringListRaw.parse(input).option
+      if (strings.size > 1 && strings.forall(validString)) {
+        val input = strings.mkString(",")
+        val parsed = loader.stringList.parse(input).option
 
         parsed shouldBe defined
-        parsed.value should contain theSameElementsAs strings
+        parsed.value.value should contain theSameElementsAs strings
+      } else {
+        val input = strings.mkString(",")
+        val parsed = loader.stringList.parse(input).option
+
+        parsed shouldBe empty
       }
     }
   }
@@ -233,7 +255,9 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
       whenever(str.indexOf('<') == -1 &&
         str.indexOf('>') == -1 &&
         ov.indexOf('<') == -1 &&
-        ov.indexOf('>') == -1
+        ov.indexOf('>') == -1 &&
+        str.nonEmpty &&
+        ov.nonEmpty
       ) {
         val parsed = loader.settingKeyParser.parse(setting).option
         parsed shouldBe defined
@@ -291,21 +315,71 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
     }
   }
 
-  "The value parser" should "parse a string list value from an input" in {
-    forAll { strings: Seq[String] =>
-      val input = strings.mkString(",")
+  def nonDelimitedStr(str: String): Boolean = {
+    str.indexOf(loader.eol) == -1 && str.indexOf('\n') == -1 && str.indexOf('\r') == -1
+  }
 
-      whenever(strings.nonEmpty && input.nonEmpty) {
+  val inputs = Gen.nonEmptyListOf(Gen.uuid.map(_.toString))
+
+  "The value parser" should "parse a string list value from an input" in {
+    forAll(inputs) { strings =>
+      if (strings.size > 1 && strings.forall(_.nonEmpty) && strings.forall(noDelimiters)) {
+        val input = strings.mkString(",")
         val parsed = loader.valueParser.parse(input).option
         parsed shouldBe defined
         parsed.value.isInstanceOf[StringListValue] shouldEqual true
-
         parsed.value.asInstanceOf[StringListValue].value should contain theSameElementsAs strings
+      } else if (strings.size == 1) {
+        val input = strings.mkString(",")
+        val parsed = loader.valueParser.parse(input).option
+        parsed shouldBe defined
+
+        parsed.value.isInstanceOf[StringValue] shouldEqual true
+        parsed.value.asInstanceOf[StringValue].value shouldEqual strings.head
+      } else if (strings.isEmpty) {
+        val input = strings.mkString(",")
+        val parsed = loader.valueParser.parse(input).option
+        parsed shouldBe empty
       }
     }
   }
 
-  "The setting parser" should "parse a boolean setting with an override" ignore {
+  "The setting parser" should "parse a boolean setting without an override and with spaces" in {
+    val key = "key"
+    val value = "true"
+    val str = s"$key = $value"
+    val parsed = loader.settingParser.parse(str).option
+
+    parsed shouldBe defined
+    parsed.value.setting.key shouldEqual key
+    parsed.value.setting.group shouldBe empty
+  }
+
+  "The setting parser" should "parse a boolean setting without an override and without spaces" in {
+    val key = "key"
+    val value = "true"
+    val str = s"$key=$value"
+    val parsed = loader.settingParser.parse(str).option
+
+    parsed shouldBe defined
+    parsed.value.setting.key shouldEqual key
+    parsed.value.setting.group shouldBe empty
+  }
+
+  "The setting parser" should "parse a boolean setting with an override and without spaces" in {
+    val key = "key"
+    val overrideGroup = "override"
+    val value = "true"
+    val str = s"$key<$overrideGroup>=$value"
+    val parsed = loader.settingParser.parse(str).option
+
+    parsed shouldBe defined
+    parsed.value.setting.key shouldEqual key
+    parsed.value.setting.group shouldBe defined
+    parsed.value.setting.group.value shouldBe Group(overrideGroup)
+  }
+
+  "The setting parser" should "parse a boolean setting with an override and with spaces" in {
     val key = "key"
     val overrideGroup = "override"
     val value = "true"

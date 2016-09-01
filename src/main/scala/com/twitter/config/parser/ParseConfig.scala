@@ -7,7 +7,7 @@ import fastparse.all._
 
 trait ParsedLine
 
-object EmptyLine extends ParsedLine
+case class EmptyLine() extends ParsedLine
 
 case class ParsedComment(comment: String) extends ParsedLine
 
@@ -36,37 +36,39 @@ class ConfigLoader {
 
   val overrideParser: P[Group] = P("<" ~/ CharsWhile(_ != '>').! ~/ ">").map(Group)
 
-  val signParser: P[String] = P(Start ~ ("-" | "+").!)
-
-  val digitParser = P(signParser.? ~ CharIn('0' to '9').rep(1).!)
-
-  val rawLongParser: P[Long] = P(signParser.? ~ CharIn('0' to '9').rep(1)).!.map(_.toLong)
-
   val trueParser = P(("true" | "yes").!).map(_ => true)
   val falseParser = P(("false" | "no").!).map(_ => false)
 
   val booleanParser: P[BooleanConfigValue] = P(trueParser | falseParser).map(BooleanConfigValue)
 
+  val signParser: P[String] = P("-" | "+").!
+  val digitParser = P(signParser.? ~ CharIn('0' to '9').rep(1)).!
+  val rawLongParser: P[Long] = digitParser.!.map(_.toLong)
+
   /**
     * Numeric parser for Long should check Long overflow.
     */
-  val numParser: P[LongValue] = rawLongParser.map(LongValue)
+  val numParser: P[LongValue] = P(rawLongParser ~ End).map(LongValue)
 
   val space  = P(CharIn(Seq('\r', '\n', ' ')).?)
 
-  val numberList: P[NumericListValue] = P(rawLongParser.rep(sep = ",".?)) map NumericListValue
+  val numberSeq = P(rawLongParser.!.map(_.toLong).rep(min = 2, sep = ","))
 
-  val strParser: P[StringValue] = P(CharsWhile(!";\r\n".contains(_)).!) map StringValue
+  val numberList: P[NumericListValue] = P(numberSeq ~ End) map NumericListValue
 
-  val stringListRaw: P[Seq[String]] = P(CharsWhile(nonDelimited).!).rep(sep = ",")
+  val stringRaw: P[String] = P(CharsWhile(!",;\r\n".contains(_))).!
 
-  val stringList: P[StringListValue] = P(CharsWhile(nonDelimited).!).rep(sep = ",").map(StringListValue)
+  val strParser: P[StringValue] = stringRaw map StringValue
 
-  val valueParser: P[ConfigValue[_]] = P(booleanParser | numParser | numberList | stringList | strParser)
+  val strSeq: P[Seq[String]] = P(stringRaw).rep(min = 2, sep = ",")
+
+  val stringList: P[StringListValue] = P(strSeq ~ End) map StringListValue
+
+  val valueParser: P[ConfigValue[_]] = P(numberList | stringList | booleanParser | numParser | strParser)
 
   val settingKeyParser = P(CharsWhile(_ != '<').rep.! ~ overrideParser.?)
 
-  val settingParser: P[ParsedSettingValue[_]] = P(settingKeyParser ~/ space.rep.? ~/ "=" ~/ space.rep.? ~/ valueParser).map {
+  val settingParser: P[ParsedSettingValue[_]] = P(settingKeyParser ~ space ~ "=" ~ space ~ valueParser).map {
     case (key, groupOverride, value) => {
       ParsedSettingValue(SettingValue(key, value, groupOverride))
     }
@@ -83,7 +85,7 @@ class ConfigLoader {
 
 
   protected[config] def parseLine(line: String): Option[ParsedLine] = {
-    if (line.isEmpty) EmptyLine
+    if (line.isEmpty) new EmptyLine
 
     lineParser.parse(line) match {
       case Parsed.Success(value, index) => Some(value)
@@ -96,6 +98,41 @@ class ConfigLoader {
       .fromFile(fileContents)
       .getLines()
       .map(parseLine)
+      .foldRight(Config.Empty) { case (line, acc) => {
+
+        var currentGroup: Option[Group] = None
+
+        line match {
+          case Some(parsed) => {
+            parsed match {
+              case x @ EmptyLine() => acc
+              case ParsedGroup(group) => {
+                currentGroup = Some(group)
+                acc
+              }
+
+              case ParsedSettingValue(setting) => {
+                if (currentGroup.isEmpty) {
+                  throw new Exception("No group was defined before settings were defined")
+                } else {
+                  acc.add(currentGroup.get, setting)
+                }
+              }
+
+              case ParsedComment(comment) => {
+                Console.println(s"Found comment $comment")
+                acc
+              }
+              case OrphanedLine(value) => {
+                Console.println(s"Found orphaned line $value")
+                acc
+              }
+            }
+          }
+          case None => acc
+        }
+      }
+      }
 
     Config.Empty
 

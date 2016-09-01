@@ -35,4 +35,6 @@ case class SettingValue[T](
   key: String,
   value: ConfigValue[T],
   group: Option[Group] = None
-)
+) {
+  def pair: (String, ConfigValue[T]) = key -> value
+}
