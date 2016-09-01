@@ -11,6 +11,8 @@ class ConfigLoaderTest extends FlatSpec with Matchers with OptionValues {
     val config = ConfigLoader.loadConfig(defaultConfig)
 
     config.get("ftp").getString("path").value shouldEqual "/tmp/"
+
+    config.get("ftp").getString("name").value shouldEqual "hello there, ftp uploading"
     config.get("ftp").getBool("enabled").value shouldEqual false
     config.get("common").getLong("student_size_limit").value shouldEqual 52428800L
 

@@ -31,7 +31,8 @@ trait ConfigParser {
   val NonLineEnding = NamedFunction(!"\r\n".contains(_: Char), "StringChars")
   val nonDelimited = NamedFunction(!",\r\n".contains(_: Char), "StringChars")
   val NonWhitespace = NamedFunction(!" \r\n".contains(_: Char), "StringChars")
-  val nonDelimitedSetting = NamedFunction(!" <>,=\r\n".contains(_: Char), "StringChars")
+  val nonDelimitedSetting = NamedFunction(!" <>,=\r\n".contains(_: Char), "SettingStringChars")
+  val AnyStringChars = NamedFunction(!"\"\\".contains(_: Char), "AnyStringChars")
 
   val groupParser: P[ParsedGroup] = P(("[" ~ CharsWhile(_ != ']').! ~ "]").map(str => ParsedGroup(Group(str))))
 
@@ -59,13 +60,21 @@ trait ConfigParser {
 
   val stringRaw: P[String] = P(CharsWhile(!",;\r\n".contains(_))).!
 
+  val hexDigit = P(CharIn('0'to'9', 'a'to'f', 'A'to'F'))
+  val unicodeEscape = P("u" ~ hexDigit ~ hexDigit ~ hexDigit ~ hexDigit)
+  val escape = P("\\" ~ (CharIn("\"/\\bfnrt") | unicodeEscape))
+
+  val strChars = P(CharsWhile(AnyStringChars) )
+
+  val quotedString: P[StringValue] = P( space ~ "\"" ~/ (strChars | escape).rep.! ~ "\"").map(StringValue)
+
   val strParser: P[StringValue] = stringRaw map StringValue
 
   val strSeq: P[Seq[String]] = P(stringRaw).rep(min = 2, sep = ",")
 
   val stringList: P[StringListValue] = P(strSeq ~ End) map StringListValue
 
-  val valueParser: P[ConfigValue[_]] = P(numberList | stringList | booleanParser | numParser | strParser)
+  val valueParser: P[ConfigValue[_]] = P(numberList | quotedString | stringList | booleanParser | numParser | strParser)
 
   val settingKeyParser = P(CharsWhile(nonDelimitedSetting).rep(1).! ~ overrideParser.?)
 

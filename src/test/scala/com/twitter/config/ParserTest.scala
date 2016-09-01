@@ -414,4 +414,119 @@ class ParserTest extends FlatSpec with Matchers with OptionValues with Generator
     parsed.value.setting.envOverride shouldBe defined
     parsed.value.setting.envOverride.value shouldBe SettingOverride(overrideGroup)
   }
+
+  "The setting parser" should "parse a string list with an override" in {
+    forAll(asciiSeq) { seq =>
+      if (seq.size > 1 && seq.forall(validString)) {
+        val key = "key"
+        val overrideGroup = "override"
+        val str = s"$key<$overrideGroup>=${seq.mkString(",")}"
+
+        val parsed = loader.settingParser.parse(str).option
+
+        parsed shouldBe defined
+        parsed.value.setting.key shouldEqual key
+
+        parsed.value.setting.value.isInstanceOf[StringListValue] shouldEqual true
+        parsed.value.setting.value.asInstanceOf[StringListValue].value should contain theSameElementsAs seq
+
+        parsed.value.setting.envOverride shouldBe defined
+        parsed.value.setting.envOverride.value shouldBe SettingOverride(overrideGroup)
+      }
+    }
+  }
+
+  "The setting parser" should "parse a string list without an override" in {
+    forAll(asciiSeq) { seq =>
+      if (seq.size > 1 && seq.forall(validString)) {
+        val key = "key"
+        val str = s"$key=${seq.mkString(",")}"
+
+        val parsed = loader.settingParser.parse(str).option
+
+        parsed shouldBe defined
+        parsed.value.setting.key shouldEqual key
+
+        parsed.value.setting.value.isInstanceOf[StringListValue] shouldEqual true
+        parsed.value.setting.value.asInstanceOf[StringListValue].value should contain theSameElementsAs seq
+
+        parsed.value.setting.envOverride shouldBe empty
+      }
+    }
+  }
+
+  "The setting parser" should "parse a numeric list with an override" in {
+    forAll { seq: Seq[Long] =>
+      if (seq.size > 1) {
+        val key = "key"
+        val overrideGroup = "override"
+        val str = s"$key<$overrideGroup>=${seq.mkString(",")}"
+
+        val parsed = loader.settingParser.parse(str).option
+
+        parsed shouldBe defined
+        parsed.value.setting.key shouldEqual key
+
+        parsed.value.setting.value.isInstanceOf[NumericListValue] shouldEqual true
+        parsed.value.setting.value.asInstanceOf[NumericListValue].value should contain theSameElementsAs seq
+
+        parsed.value.setting.envOverride shouldBe defined
+        parsed.value.setting.envOverride.value shouldBe SettingOverride(overrideGroup)
+      }
+    }
+  }
+
+  "The setting parser" should "parse a numeric list without an override" in {
+    forAll { seq: Seq[Long] =>
+      if (seq.size > 1) {
+        val key = "key"
+        val str = s"$key=${seq.mkString(",")}"
+
+        val parsed = loader.settingParser.parse(str).option
+
+        parsed shouldBe defined
+        parsed.value.setting.key shouldEqual key
+
+        parsed.value.setting.value.isInstanceOf[NumericListValue] shouldEqual true
+        parsed.value.setting.value.asInstanceOf[NumericListValue].value should contain theSameElementsAs seq
+
+        parsed.value.setting.envOverride shouldBe empty
+      }
+    }
+  }
+
+  "The setting parser" should "parse a quoted string with an override" in {
+    val key = "key"
+    val overrideGroup = "override"
+    val innerValue = "this, is really nice"
+    val value = "\"" + innerValue + "\""
+    val str = s"$key<$overrideGroup>=$value"
+    val parsed = loader.settingParser.parse(str).option
+
+    parsed shouldBe defined
+    parsed.value.setting.key shouldEqual key
+
+    parsed.value.setting.value.isInstanceOf[StringValue] shouldEqual true
+    parsed.value.setting.value.asInstanceOf[StringValue].value shouldEqual innerValue
+
+    parsed.value.setting.envOverride shouldBe defined
+    parsed.value.setting.envOverride.value shouldBe SettingOverride(overrideGroup)
+  }
+
+  "The setting parser" should "parse a quoted string without an override" in {
+    val key = "key"
+    val innerValue = "this, is really nice"
+    val value = "\"" + innerValue + "\""
+    val str = s"$key=$value"
+    val parsed = loader.settingParser.parse(str).option
+
+    parsed shouldBe defined
+    parsed.value.setting.key shouldEqual key
+
+    parsed.value.setting.value.isInstanceOf[StringValue] shouldEqual true
+    parsed.value.setting.value.asInstanceOf[StringValue].value shouldEqual innerValue
+
+    parsed.value.setting.envOverride shouldBe empty
+  }
+
 }
