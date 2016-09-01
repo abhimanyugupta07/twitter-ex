@@ -1,7 +1,9 @@
 package com.twitter.config.parser
 
+import com.twitter.config.exceptions.MissingGroupDefinition
 import com.twitter.config.{Config, Group, SettingOverride}
 import fastparse.all._
+
 import scala.io.Source
 import org.slf4j.LoggerFactory
 
@@ -30,7 +32,7 @@ class ConfigLoader extends ConfigParser {
 
             case ParsedSettingValue(setting) => {
               if (currentGroup.isEmpty) {
-                val ex = new Exception("No group was defined before settings were defined")
+                val ex = MissingGroupDefinition(setting)
                 logger.error("No group definition found", ex)
                 throw ex
               } else {
@@ -50,15 +52,11 @@ class ConfigLoader extends ConfigParser {
               logger.warn(s"Found orphaned line $value")
               acc
             }
-            case l @ _ => {
-              logger.warn(s"Found unexpected result $parsed")
-              acc
-            }
           }
         }
         case f @ Parsed.Failure(last, index, extra) => {
           val ex = new Exception(f.msg)
-          logger.error("Invalid configuration file", ex)
+          logger.error(s"Invalid configuration file at index $index, extra: $extra", ex)
           throw ex
         }
       }

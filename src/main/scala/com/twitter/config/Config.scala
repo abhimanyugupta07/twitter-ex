@@ -10,6 +10,10 @@ case class Config(underlying: Map[Group, Map[String, ConfigValue[_]]]) {
 
   def get(group: String): ConfigSelection = get(Group(group))
 
+  def contains(group: Group): Boolean = underlying.contains(group)
+
+  def contains(group: String): Boolean = underlying.contains(Group(group))
+
   def add(group: Group, settingValue: SettingValue[_]): Config = {
     val innerMap = get(group).underlying + settingValue.pair
     Config(underlying + (group -> innerMap))

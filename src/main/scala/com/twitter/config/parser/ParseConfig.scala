@@ -60,7 +60,7 @@ trait ConfigParser {
 
   val stringRaw: P[String] = P(CharsWhile(!",;\r\n".contains(_))).!
 
-  val hexDigit = P(CharIn('0'to'9', 'a'to'f', 'A'to'F'))
+  val hexDigit = P(CharIn('0' to '9', 'a' to 'f', 'A' to 'F'))
   val unicodeEscape = P("u" ~ hexDigit ~ hexDigit ~ hexDigit ~ hexDigit)
   val escape = P("\\" ~ (CharIn("\"/\\bfnrt") | unicodeEscape))
 
@@ -84,21 +84,9 @@ trait ConfigParser {
     }
   }
 
-  val commentParser: P[ParsedComment] = P(";" ~/ CharsWhile(NonLineEnding).!).map(ParsedComment)
+  val commentParser: P[ParsedComment] = P(Start ~ ";" ~/ CharsWhile(NonLineEnding).!).map(ParsedComment)
 
   val orphanedLine: P[ParsedOrphanedLine] = P(CharsWhile(!";\r\n".contains(_)).rep.!).map(ParsedOrphanedLine)
 
   val lineParser: P[ParsedLine] = P(groupParser | settingParser | commentParser | orphanedLine)
-
-  val fileParser = lineParser.rep(0, sep = P(eol))
-
-  protected[config] def parseLine(line: String): Option[ParsedLine] = {
-    if (line.isEmpty) new EmptyLine
-
-    lineParser.parse(line) match {
-      case Parsed.Success(value, index) => Some(value)
-      case Parsed.Failure(last, index, extra) => None
-    }
-  }
-
 }
