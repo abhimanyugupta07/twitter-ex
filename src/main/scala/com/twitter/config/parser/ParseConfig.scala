@@ -15,7 +15,7 @@ case class ParsedSettingValue[T](setting: SettingValue[T]) extends ParsedLine
 
 case class ParsedGroup(value: Group) extends ParsedLine
 
-case class OrphanedLine(value: String) extends ParsedLine
+case class ParsedOrphanedLine(value: String) extends ParsedLine
 
 class ConfigLoader {
   case class NamedFunction[T, V](f: T => V, name: String) extends (T => V){
@@ -76,9 +76,9 @@ class ConfigLoader {
 
   val commentParser: P[ParsedComment] = P(";" ~/ CharsWhile(NonLineEnding).rep.! ~/ CharsWhile(Whitespace).rep(1)).map(ParsedComment)
 
-  val orphanedLine: P[OrphanedLine] = P(CharsWhile(!";\r\n".contains(_)).rep.!).map(OrphanedLine)
+  val orphanedLine: P[ParsedOrphanedLine] = P(CharsWhile(!";\r\n".contains(_)).rep.!).map(ParsedOrphanedLine)
 
-  val lineParser = groupParser | settingParser | commentParser | orphanedLine
+  val lineParser: P[ParsedLine] = groupParser | settingParser | commentParser | orphanedLine
 
 
   val fileParser = lineParser.rep(0, sep = P(eol))
@@ -93,49 +93,51 @@ class ConfigLoader {
     }
   }
 
-  def parse(fileContents: String): Config = {
-    val lines = Source
-      .fromFile(fileContents)
-      .getLines()
-      .map(parseLine)
-      .foldRight(Config.Empty) { case (line, acc) => {
+  def buildConfig(lines: Iterator[Parsed[ParsedLine]]): Config = {
+    lines.foldRight(Config.Empty) { case (line, acc) => {
+      var currentGroup: Option[Group] = None
 
-        var currentGroup: Option[Group] = None
+      line match {
+        case Parsed.Success(parsed, index) => {
+          parsed match {
+            case x @ EmptyLine() => acc
+            case ParsedGroup(group) => {
+              currentGroup = Some(group)
+              acc
+            }
 
-        line match {
-          case Some(parsed) => {
-            parsed match {
-              case x @ EmptyLine() => acc
-              case ParsedGroup(group) => {
-                currentGroup = Some(group)
-                acc
-              }
-
-              case ParsedSettingValue(setting) => {
-                if (currentGroup.isEmpty) {
-                  throw new Exception("No group was defined before settings were defined")
-                } else {
-                  acc.add(currentGroup.get, setting)
-                }
-              }
-
-              case ParsedComment(comment) => {
-                Console.println(s"Found comment $comment")
-                acc
-              }
-              case OrphanedLine(value) => {
-                Console.println(s"Found orphaned line $value")
-                acc
+            case ParsedSettingValue(setting) => {
+              if (currentGroup.isEmpty) {
+                throw new Exception("No group was defined before settings were defined")
+              } else {
+                acc.add(currentGroup.get, setting)
               }
             }
+
+            case ParsedComment(comment) => {
+              Console.println(s"Found comment $comment")
+              acc
+            }
+            case ParsedOrphanedLine(value) => {
+              Console.println(s"Found orphaned line $value")
+              acc
+            }
           }
-          case None => acc
+        }
+        case f @ Parsed.Failure(last, index, extra) => {
+          throw new Exception(f.msg)
         }
       }
-      }
+    }
+  }
+  }
 
-    Config.Empty
+  def loadConfig(fileName: String): Config = {
+    val source = getClass.getResourceAsStream("/" + fileName)
 
+    buildConfig {
+      Source.fromInputStream(source).getLines().map(lineParser.parse(_))
+    }
   }
 }
 
