@@ -1,10 +1,28 @@
 *.class
 *.log
+*.jar
+*.jar.old
+
+atlassian-ide-plugin.xml
+
+
+# Eclipse specific
+.classpath
+.project
+.settings/
+.metadata
+
+# Project statistics
+stats
+
+# Java heap dump files
+java_pid*
+
+
+# InteliJ IDEA
+*.iml
 
 # sbt specific
-.cache
-.history
-.lib/
 dist/*
 target/
 lib_managed/
@@ -14,4 +32,10 @@ project/plugins/project/
 
 # Scala-IDE specific
 .scala_dependencies
-.worksheet
+
+# MacOS X specific
+.DS_Store
+
+#InteliJ
+.idea_modules/
+.idea/
