@@ -1,6 +1,6 @@
 package com.twitter.config.adt
 
-import com.twitter.config.Group
+import com.twitter.config.{Group, SettingOverride}
 
 trait ConfigValue[T] {
   def value: T
@@ -34,7 +34,7 @@ case class NumericListValue(
 case class SettingValue[T](
   key: String,
   value: ConfigValue[T],
-  group: Option[Group] = None
+  envOverride: Option[SettingOverride] = None
 ) {
   def pair: (String, ConfigValue[T]) = key -> value
 }

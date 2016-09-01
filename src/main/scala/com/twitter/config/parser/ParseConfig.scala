@@ -1,8 +1,7 @@
 package com.twitter.config.parser
 
+import com.twitter.config.{Group, SettingOverride}
 import com.twitter.config.adt._
-import com.twitter.config.{Config, Group}
-import scala.io.Source
 import fastparse.all._
 
 trait ParsedLine
@@ -17,11 +16,12 @@ case class ParsedGroup(value: Group) extends ParsedLine
 
 case class ParsedOrphanedLine(value: String) extends ParsedLine
 
-class ConfigLoader {
-  case class NamedFunction[T, V](f: T => V, name: String) extends (T => V){
-    def apply(t: T) = f(t)
-    override def toString() = name
-  }
+case class NamedFunction[T, V](f: T => V, name: String) extends (T => V){
+  def apply(t: T) = f(t)
+  override def toString() = name
+}
+
+trait ConfigParser {
 
   val eol = sys.props.get("line.separator").getOrElse(throw new RuntimeException("Could not get line separator"))
   val eoz = "\\z"
@@ -33,9 +33,9 @@ class ConfigLoader {
   val NonWhitespace = NamedFunction(!" \r\n".contains(_: Char), "StringChars")
   val nonDelimitedSetting = NamedFunction(!"<,= \r\n".contains(_: Char), "StringChars")
 
-  val groupParser: P[ParsedGroup] = P(("[" ~ CharsWhile(_ != ']').! ~ "]").!.map(str => ParsedGroup(Group(str))))
+  val groupParser: P[ParsedGroup] = P(("[" ~ CharsWhile(_ != ']').! ~ "]").map(str => ParsedGroup(Group(str))))
 
-  val overrideParser: P[Group] = P("<" ~/ CharsWhile(_ != '>').! ~/ ">").map(Group)
+  val overrideParser: P[SettingOverride] = P("<" ~/ CharsWhile(ch => ch != '>' && ch != '<').rep(1).! ~/ ">").map(SettingOverride)
 
   val trueParser = P(("true" | "yes").!).map(_ => true)
   val falseParser = P(("false" | "no").!).map(_ => false)
@@ -67,7 +67,7 @@ class ConfigLoader {
 
   val valueParser: P[ConfigValue[_]] = P(numberList | stringList | booleanParser | numParser | strParser)
 
-  val settingKeyParser = P(CharsWhile(nonDelimitedSetting).rep.! ~ overrideParser.?)
+  val settingKeyParser = P(CharsWhile(nonDelimitedSetting).rep(1).! ~ overrideParser.?)
 
   val settingParser: P[ParsedSettingValue[_]] = P(settingKeyParser ~ space ~ "=" ~ space ~ valueParser).map {
     case (key, groupOverride, value) => {
@@ -92,72 +92,4 @@ class ConfigLoader {
     }
   }
 
-  def buildConfig(lines: Iterator[Parsed[ParsedLine]]): Config = {
-    var currentGroup: Option[Group] = None
-
-    lines.foldLeft(Config.Empty) { case (acc, line) => {
-
-      line match {
-        case Parsed.Success(parsed, index) => {
-          Console.println(parsed)
-          parsed match {
-            case x @ EmptyLine() => {
-              Console.println(s"Found an empty line $parsed")
-              acc
-            }
-
-            case ParsedGroup(group) => {
-              Console.println(s"Found a group called $group")
-              currentGroup = Some(group)
-              acc
-            }
-
-            case ParsedSettingValue(setting) => {
-              if (currentGroup.isEmpty) {
-                Console.println(parsed)
-                throw new Exception("No group was defined before settings were defined")
-              } else {
-                acc.add(currentGroup.get, setting)
-              }
-            }
-
-            case ParsedComment(comment) => {
-              Console.println(s"Found comment $comment")
-              acc
-            }
-            case ParsedOrphanedLine(value) => {
-              Console.println(s"Found orphaned line $value")
-              acc
-            }
-            case l @ _ => {
-              Console.println(s"Found unexpected result $parsed")
-              acc
-            }
-          }
-        }
-        case f @ Parsed.Failure(last, index, extra) => {
-          Console.println(last)
-          Console.println(index)
-          Console.println(extra)
-          throw new Exception(f.msg)
-        }
-      }
-    }
-  }
-  }
-
-  def loadConfig(fileName: String): Config = {
-    val source = getClass.getResourceAsStream("/" + fileName)
-
-    buildConfig {
-      Source.fromInputStream(source).getLines().map(lineParser.parse(_))
-    }
-  }
-}
-
-object ConfigLoader {
-
-  def loadConfig(file: String): Config = {
-    new ConfigLoader().loadConfig(file)
-  }
 }

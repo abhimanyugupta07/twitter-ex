@@ -4,7 +4,5 @@ import com.twitter.config.parser.ConfigLoader
 
 object Runner extends App {
 
-  val loader = new ConfigLoader()
-
-  val config = loader.loadConfig("example.tconf")
+  val config = ConfigLoader.loadConfig("example.tconf")
 }

@@ -12,3 +12,7 @@ instructions to fully define the parsing setting of the config.
 - A setting $key cannot contain delimiting characters("<", ">").
 - A setting $override cannot contain line endings.
 - A setting $override cannot contain delimiting characters("<", ">").
+
+- We are respecting the original spec by allowing the last override
+defined on the string to have priority. Another way would be to respect
+the other defined in the list of overrides passed to `loadConfig()`.
