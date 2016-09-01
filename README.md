@@ -1,3 +1,7 @@
+## ConfigLoader
+
+[![Build Status](https://travis-ci.org/alexflav23/twitter-ex.svg?branch=master)](https://travis-ci.org/alexflav23/twitter-ex) [![Coverage Status](https://coveralls.io/repos/github/alexflav23/twitter-ex/badge.svg?branch=master)](https://coveralls.io/github/alexflav23/twitter-ex?branch=master)
+
 ### Assumptions
 
 The following set of assumptions were made in addition to the original

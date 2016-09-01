@@ -1,0 +1,19 @@
+language: scala
+
+sudo: false
+
+scala:
+- 2.11.8
+
+branches:
+  only:
+  - master
+  - develop
+
+# Workaround known dependency resolution timeouts inside Travis CI.
+before_script: travis_retry sbt ++$TRAVIS_SCALA_VERSION update
+
+# Inlining coveralls call to work around issue with coverageReport state being dropped in coveralls plugin
+# https://github.com/scoverage/sbt-coveralls/issues/85
+script:
+  - sbt ++$TRAVIS_SCALA_VERSION coverage test coverageReport coveralls
